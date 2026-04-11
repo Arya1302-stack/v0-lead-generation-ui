@@ -1,5 +1,19 @@
-fastapi>=0.100
-uvicorn[standard]>=0.22
-pydantic>=2
-scrapling>=0.4
-curl_cffi>=0.6
+# FastAPI stack
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2,<3
+
+# HTTP / scraping (maps_scraper uses subprocess to Go; deep_scraper uses Scrapling)
+scrapling>=0.4,<1
+curl-cffi>=0.6
+browserforge>=1.2
+
+# Pulled in by Scrapling’s engine stack (explicit pins avoid broken resolves)
+playwright>=1.48,<2
+lxml>=5,<7
+orjson>=3.9,<4
+cssselect>=1.2,<2
+tld>=0.13,<1
+w3lib>=2.0,<3
+typing_extensions>=4.8,<5
+certifi>=2024.2.2

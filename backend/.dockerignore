@@ -1,0 +1,47 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Test / tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Git / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local env and secrets
+.env
+.env.*
+!.env.example
+
+# Runtime artifacts (mounted volumes are better in production)
+results/
+*.csv
+
+# Docs (not needed in image)
+*.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (avoid recursive context)
+Dockerfile*
+!.dockerignore
