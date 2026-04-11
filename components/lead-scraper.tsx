@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Download, Search, RotateCcw, Building2, MapPin, Target } from "lucide-react"
+
+const SCRAPE_API_URL = "http://localhost:8000/api/scrape"
 
 type UIState = "input" | "processing" | "results"
 
@@ -32,47 +35,40 @@ interface Lead {
   website: string
 }
 
-const mockLeads: Lead[] = [
-  {
-    companyName: "TechVentures Inc.",
-    phoneNumber: "+1 (555) 234-5678",
-    email: "contact@techventures.com",
-    picName: "Sarah Mitchell",
-    website: "techventures.com",
-  },
-  {
-    companyName: "DataFlow Solutions",
-    phoneNumber: "+1 (555) 345-6789",
-    email: "info@dataflow.io",
-    picName: "Michael Chen",
-    website: "dataflow.io",
-  },
-  {
-    companyName: "CloudNine Systems",
-    phoneNumber: "+1 (555) 456-7890",
-    email: "hello@cloudnine.dev",
-    picName: "Emily Rodriguez",
-    website: "cloudnine.dev",
-  },
-  {
-    companyName: "InnovateTech Labs",
-    phoneNumber: "+1 (555) 567-8901",
-    email: "business@innovatetech.co",
-    picName: "James Wilson",
-    website: "innovatetech.co",
-  },
-  {
-    companyName: "NextGen Digital",
-    phoneNumber: "+1 (555) 678-9012",
-    email: "sales@nextgendigital.com",
-    picName: "Amanda Foster",
-    website: "nextgendigital.com",
-  },
-]
+interface ApiLeadRow {
+  company_name: string
+  phone: string
+  email: string
+  pic_name: string | null
+  website: string
+}
+
+interface ScrapeApiResponse {
+  leads: ApiLeadRow[]
+}
+
+function mapApiLead(row: ApiLeadRow): Lead {
+  return {
+    companyName: row.company_name ?? "",
+    phoneNumber: row.phone ?? "",
+    email: row.email ?? "",
+    picName: row.pic_name ?? "",
+    website: row.website ?? "",
+  }
+}
+
+function websiteHref(website: string): string {
+  const w = website.trim()
+  if (!w) return "#"
+  if (w.startsWith("http://") || w.startsWith("https://")) return w
+  return `https://${w}`
+}
 
 export function LeadScraper() {
   const [uiState, setUIState] = useState<UIState>("input")
   const [progress, setProgress] = useState(0)
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [scrapeError, setScrapeError] = useState<string | null>(null)
   const [formData, setFormData] = useState<FormData>({
     keyword: "",
     city: "",
@@ -83,40 +79,91 @@ export function LeadScraper() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleStartScraping = (e: React.FormEvent) => {
+  const handleStartScraping = async (e: React.FormEvent) => {
     e.preventDefault()
-    setUIState("processing")
+    setScrapeError(null)
     setProgress(0)
-  }
+    setUIState("processing")
 
-  useEffect(() => {
-    if (uiState === "processing") {
-      const interval = setInterval(() => {
-        setProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval)
-            setUIState("results")
-            return 100
-          }
-          return prev + Math.random() * 15 + 5
-        })
-      }, 300)
+    const progressInterval = window.setInterval(() => {
+      setProgress((prev) => (prev >= 90 ? 90 : Math.min(prev + Math.random() * 4 + 2, 90)))
+    }, 350)
 
-      return () => clearInterval(interval)
+    const body = JSON.stringify({
+      keyword: formData.keyword,
+      city: formData.city,
+      radius: Number.parseFloat(formData.radius),
+    })
+
+    try {
+      const res = await fetch(SCRAPE_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      })
+
+      window.clearInterval(progressInterval)
+
+      if (res.status >= 500) {
+        const msg = "The server returned an error. Please try again later."
+        setScrapeError(msg)
+        toast.error(msg)
+        setProgress(0)
+        return
+      }
+
+      if (!res.ok) {
+        const msg = `Request failed (${res.status}). Check your input and try again.`
+        setScrapeError(msg)
+        toast.error(msg)
+        setProgress(0)
+        return
+      }
+
+      let data: ScrapeApiResponse
+      try {
+        data = await res.json()
+      } catch {
+        const msg = "Received an invalid response from the server."
+        setScrapeError(msg)
+        toast.error(msg)
+        setProgress(0)
+        return
+      }
+      const mapped = Array.isArray(data.leads) ? data.leads.map(mapApiLead) : []
+
+      setProgress(100)
+      setLeads(mapped)
+      setUIState("results")
+    } catch {
+      window.clearInterval(progressInterval)
+      const msg =
+        "Could not reach the API. Is the backend running at http://localhost:8000?"
+      setScrapeError(msg)
+      toast.error(msg)
+      setProgress(0)
     }
-  }, [uiState])
+  }
 
   const handleNewRequest = () => {
     setUIState("input")
     setProgress(0)
+    setScrapeError(null)
+    setLeads([])
     setFormData({ keyword: "", city: "", radius: "" })
+  }
+
+  const handleBackFromProcessingError = () => {
+    setScrapeError(null)
+    setUIState("input")
+    setProgress(0)
   }
 
   const handleDownloadCSV = useCallback(() => {
     const headers = ["Company Name", "Phone Number", "Email", "PIC Name", "Website"]
     const csvContent = [
       headers.join(","),
-      ...mockLeads.map((lead) =>
+      ...leads.map((lead) =>
         [lead.companyName, lead.phoneNumber, lead.email, lead.picName, lead.website].join(",")
       ),
     ].join("\n")
@@ -126,7 +173,7 @@ export function LeadScraper() {
     link.href = URL.createObjectURL(blob)
     link.download = `leads-${formData.keyword || "data"}-${formData.city || "all"}.csv`
     link.click()
-  }, [formData.keyword, formData.city])
+  }, [formData.keyword, formData.city, leads])
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -252,9 +299,25 @@ export function LeadScraper() {
                       {Math.min(Math.round(progress), 100)}% complete
                     </p>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-4">
-                    Please wait while we gather the data...
-                  </p>
+                  {scrapeError ? (
+                    <div className="w-full mt-4 space-y-3 text-left">
+                      <p className="text-sm text-destructive" role="alert">
+                        {scrapeError}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        onClick={handleBackFromProcessingError}
+                      >
+                        Back to search
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-4">
+                      Please wait while we gather the data...
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -268,14 +331,14 @@ export function LeadScraper() {
               <div>
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Results</h1>
                 <p className="text-muted-foreground mt-1">
-                  Found <span className="font-semibold text-foreground">{mockLeads.length}</span>{" "}
+                  Found <span className="font-semibold text-foreground">{leads.length}</span>{" "}
                   leads for{" "}
                   <span className="font-medium text-foreground">{formData.keyword}</span> in{" "}
                   <span className="font-medium text-foreground">{formData.city}</span>
                 </p>
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={handleDownloadCSV}>
+                <Button variant="outline" onClick={handleDownloadCSV} disabled={leads.length === 0}>
                   <Download className="size-4" />
                   Download CSV
                 </Button>
@@ -298,31 +361,47 @@ export function LeadScraper() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockLeads.map((lead, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{lead.companyName}</TableCell>
-                      <TableCell>{lead.phoneNumber}</TableCell>
-                      <TableCell>
-                        <a
-                          href={`mailto:${lead.email}`}
-                          className="text-primary hover:underline"
-                        >
-                          {lead.email}
-                        </a>
-                      </TableCell>
-                      <TableCell>{lead.picName}</TableCell>
-                      <TableCell>
-                        <a
-                          href={`https://${lead.website}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          {lead.website}
-                        </a>
+                  {leads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                        No leads returned. Try different search parameters.
                       </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    leads.map((lead, index) => (
+                      <TableRow key={`${lead.companyName}-${index}`}>
+                        <TableCell className="font-medium">{lead.companyName}</TableCell>
+                        <TableCell>{lead.phoneNumber}</TableCell>
+                        <TableCell>
+                          {lead.email ? (
+                            <a
+                              href={`mailto:${lead.email}`}
+                              className="text-primary hover:underline"
+                            >
+                              {lead.email}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{lead.picName || "—"}</TableCell>
+                        <TableCell>
+                          {lead.website ? (
+                            <a
+                              href={websiteHref(lead.website)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              {lead.website}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </Card>
