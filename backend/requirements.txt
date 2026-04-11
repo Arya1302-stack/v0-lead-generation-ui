@@ -1,0 +1,5 @@
+fastapi>=0.100
+uvicorn[standard]>=0.22
+pydantic>=2
+scrapling>=0.4
+curl_cffi>=0.6

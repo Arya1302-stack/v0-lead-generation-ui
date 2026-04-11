@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import uvicorn
 from fastapi import FastAPI
@@ -11,11 +12,27 @@ from maps_scraper import read_maps_results_csv, run_maps_scraper
 # Prototype cap: max businesses sent through deep scraping per request
 MAX_BUSINESSES_PER_SCRAPE = 500
 
+_DEFAULT_CORS_ORIGINS = "http://localhost:3000,http://127.0.0.1:3000"
+
+
+def _cors_origins() -> list[str]:
+    raw = os.environ.get("CORS_ORIGINS", "").strip()
+    if not raw:
+        return [o.strip() for o in _DEFAULT_CORS_ORIGINS.split(",") if o.strip()]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
+
+def _cors_origin_regex() -> str | None:
+    r = os.environ.get("CORS_ORIGIN_REGEX", "").strip()
+    return r or None
+
+
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins(),
+    allow_origin_regex=_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

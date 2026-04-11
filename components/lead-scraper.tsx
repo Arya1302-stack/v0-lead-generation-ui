@@ -17,7 +17,18 @@ import {
 } from "@/components/ui/table"
 import { Download, Search, RotateCcw, Building2, MapPin, Target } from "lucide-react"
 
-const SCRAPE_API_URL = "http://localhost:8000/api/scrape"
+/**
+ * Same-origin `/api/scrape` (Next.js proxy) in production — avoids CORS and localhost in the browser.
+ * Set NEXT_PUBLIC_SCRAPE_API_URL only if the client must call FastAPI directly.
+ */
+function getScrapeApiUrl(): string {
+  const direct = process.env.NEXT_PUBLIC_SCRAPE_API_URL?.trim()
+  if (direct) {
+    const base = direct.replace(/\/$/, "")
+    return base.endsWith("/api/scrape") ? base : `${base}/api/scrape`
+  }
+  return "/api/scrape"
+}
 
 type UIState = "input" | "processing" | "results"
 
@@ -105,7 +116,7 @@ export function LeadScraper() {
     })
 
     try {
-      const res = await fetch(SCRAPE_API_URL, {
+      const res = await fetch(getScrapeApiUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body,
@@ -114,7 +125,13 @@ export function LeadScraper() {
       window.clearInterval(progressInterval)
 
       if (res.status >= 500) {
-        const msg = "The server returned an error. Please try again later."
+        let msg = "The server returned an error. Please try again later."
+        try {
+          const errJson = await res.clone().json()
+          if (typeof errJson?.detail === "string") msg = errJson.detail
+        } catch {
+          /* use default */
+        }
         setScrapeError(msg)
         toast.error(msg)
         setProgress(0)
@@ -122,7 +139,13 @@ export function LeadScraper() {
       }
 
       if (!res.ok) {
-        const msg = `Request failed (${res.status}). Check your input and try again.`
+        let msg = `Request failed (${res.status}). Check your input and try again.`
+        try {
+          const errJson = await res.clone().json()
+          if (typeof errJson?.detail === "string") msg = errJson.detail
+        } catch {
+          /* use default */
+        }
         setScrapeError(msg)
         toast.error(msg)
         setProgress(0)
@@ -147,7 +170,7 @@ export function LeadScraper() {
     } catch {
       window.clearInterval(progressInterval)
       const msg =
-        "Could not reach the API. Is the backend running at http://localhost:8000?"
+        "Network error: could not reach the app. If you are online, ensure the site is deployed and the scrape backend URL is configured (SCRAPE_BACKEND_URL on Vercel)."
       setScrapeError(msg)
       toast.error(msg)
       setProgress(0)
