@@ -64,6 +64,15 @@ function websiteHref(website: string): string {
   return `https://${w}`
 }
 
+/** Escape a CSV cell: wrap in quotes if needed; double any internal quotes. */
+function escapeCsvField(value: string): string {
+  const s = value ?? ""
+  if (/[",\r\n]/.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`
+  }
+  return s
+}
+
 export function LeadScraper() {
   const [uiState, setUIState] = useState<UIState>("input")
   const [progress, setProgress] = useState(0)
@@ -160,20 +169,37 @@ export function LeadScraper() {
   }
 
   const handleDownloadCSV = useCallback(() => {
-    const headers = ["Company Name", "Phone Number", "Email", "PIC Name", "Website"]
-    const csvContent = [
-      headers.join(","),
-      ...leads.map((lead) =>
-        [lead.companyName, lead.phoneNumber, lead.email, lead.picName, lead.website].join(",")
-      ),
-    ].join("\n")
+    if (leads.length === 0) {
+      toast.message("No leads to export", {
+        description: "Run a scrape with results before downloading CSV.",
+      })
+      return
+    }
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const headers = ["Company Name", "Phone", "Email", "PIC Name", "Website"]
+    const headerLine = headers.map(escapeCsvField).join(",")
+    const rows = leads.map((lead) =>
+      [
+        escapeCsvField(lead.companyName),
+        escapeCsvField(lead.phoneNumber),
+        escapeCsvField(lead.email),
+        escapeCsvField(lead.picName),
+        escapeCsvField(lead.website),
+      ].join(",")
+    )
+    const csvString = [headerLine, ...rows].join("\n")
+
+    const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" })
+    const objectUrl = URL.createObjectURL(blob)
     const link = document.createElement("a")
-    link.href = URL.createObjectURL(blob)
-    link.download = `leads-${formData.keyword || "data"}-${formData.city || "all"}.csv`
+    link.href = objectUrl
+    link.download = "scraped_leads.csv"
+    link.style.display = "none"
+    document.body.appendChild(link)
     link.click()
-  }, [formData.keyword, formData.city, leads])
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+  }, [leads])
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -338,7 +364,7 @@ export function LeadScraper() {
                 </p>
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={handleDownloadCSV} disabled={leads.length === 0}>
+                <Button variant="outline" onClick={handleDownloadCSV}>
                   <Download className="size-4" />
                   Download CSV
                 </Button>

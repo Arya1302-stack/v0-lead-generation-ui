@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field
 from deep_scraper import extract_contact_info
 from maps_scraper import read_maps_results_csv, run_maps_scraper
 
+# Prototype cap: max businesses sent through deep scraping per request
+MAX_BUSINESSES_PER_SCRAPE = 500
+
 app = FastAPI()
 
 app.add_middleware(
@@ -92,6 +95,14 @@ async def scrape(req: ScrapeRequest) -> ScrapeResponse:
 
     if not rows:
         return ScrapeResponse(leads=[])
+
+    total_from_maps = len(rows)
+    rows = rows[:MAX_BUSINESSES_PER_SCRAPE]
+    print(
+        f"[api/scrape] Maps returned {total_from_maps} businesses total; "
+        f"limiting to {len(rows)} before extract_contact_info (cap={MAX_BUSINESSES_PER_SCRAPE}).",
+        flush=True,
+    )
 
     enriched = await asyncio.gather(
         *(_enrich_lead(r) for r in rows),
