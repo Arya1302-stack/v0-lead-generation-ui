@@ -17,16 +17,8 @@ import {
 } from "@/components/ui/table"
 import { Download, Search, RotateCcw, Building2, MapPin, Target } from "lucide-react"
 
-/**
- * Same-origin `/api/scrape` (Next.js proxy) in production — avoids CORS and localhost in the browser.
- * Set NEXT_PUBLIC_SCRAPE_API_URL only if the client must call FastAPI directly.
- */
+/** Same-origin `/api/scrape` (Next.js proxy) — server forwards to Railway/FastAPI; avoids CORS in the browser. */
 function getScrapeApiUrl(): string {
-  const direct = process.env.NEXT_PUBLIC_SCRAPE_API_URL?.trim()
-  if (direct) {
-    const base = direct.replace(/\/$/, "")
-    return base.endsWith("/api/scrape") ? base : `${base}/api/scrape`
-  }
   return "/api/scrape"
 }
 
@@ -170,7 +162,7 @@ export function LeadScraper() {
     } catch {
       window.clearInterval(progressInterval)
       const msg =
-        "Network error: could not reach the app. If you are online, ensure the site is deployed and the scrape backend URL is configured (SCRAPE_BACKEND_URL on Vercel)."
+        "Network error: could not reach the app. If you are online, ensure the site is deployed and the scrape backend URL is set on Vercel (SCRAPE_BACKEND_URL or NEXT_PUBLIC_SCRAPE_API_URL)."
       setScrapeError(msg)
       toast.error(msg)
       setProgress(0)

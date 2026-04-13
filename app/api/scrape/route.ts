@@ -1,13 +1,32 @@
 import { NextResponse } from "next/server"
 
 /**
+ * Resolve FastAPI base URL (no trailing slash).
+ * Vercel: set SCRAPE_BACKEND_URL or NEXT_PUBLIC_SCRAPE_API_URL to your Railway/host URL.
+ * Both names are accepted so one env works for the server proxy.
+ */
+function resolveBackendBase(): string {
+  const raw =
+    process.env.SCRAPE_BACKEND_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SCRAPE_API_URL?.trim() ||
+    ""
+  if (!raw) {
+    return "http://127.0.0.1:8000"
+  }
+  let base = raw.replace(/\/$/, "")
+  if (!/^https?:\/\//i.test(base)) {
+    base = `https://${base.replace(/^\/+/, "")}`
+  }
+  return base
+}
+
+/**
  * Server-side proxy to the FastAPI scrape service.
- * - Production (Vercel): set SCRAPE_BACKEND_URL to your public API base, e.g. https://api.myapp.com
+ * - Production (Vercel): set SCRAPE_BACKEND_URL or NEXT_PUBLIC_SCRAPE_API_URL
  * - Local: defaults to http://127.0.0.1:8000 so `next dev` forwards to a local FastAPI process.
  */
 function upstreamScrapeUrl(): string {
-  const base = (process.env.SCRAPE_BACKEND_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "")
-  return `${base}/api/scrape`
+  return `${resolveBackendBase()}/api/scrape`
 }
 
 /** Allow long-running maps + deep scrape on Vercel (requires plan that supports it). */
@@ -39,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         detail:
-          "Could not reach the scrape backend. On Vercel, set SCRAPE_BACKEND_URL to your deployed FastAPI URL.",
+          "Could not reach the scrape backend. On Vercel, set SCRAPE_BACKEND_URL or NEXT_PUBLIC_SCRAPE_API_URL to your deployed FastAPI base URL (e.g. https://your-app.up.railway.app).",
       },
       { status: 502 },
     )
